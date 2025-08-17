@@ -1,0 +1,226 @@
+
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Assessment Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
+  <body class="bg-gray-50">
+    <div id="root" class="p-4"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect } = React;
+
+      function Field({label, children}){
+        return (
+          <div className="mb-3">
+            <div className="text-sm font-medium mb-1">{label}</div>
+            {children}
+          </div>
+        );
+      }
+
+      function App(){
+        const [phase, setPhase] = useState(1);
+        const [blueprint, setBlueprint] = useState(null);
+        const [test, setTest] = useState(null);
+        const [responses, setResponses] = useState({});
+        const [loading, setLoading] = useState(false);
+
+        const [role, setRole] = useState("Frontend Developer");
+        const [stack, setStack] = useState("React, Node.js, MongoDB");
+        const [experience, setExperience] = useState("1-3 years");
+        const [types, setTypes] = useState(["MCQ","coding","scenario"]);
+        const [duration, setDuration] = useState(45);
+        const [notes, setNotes] = useState("Make it heavy on problem-solving and include at least one system design question.");
+
+        async function createBlueprint(){
+          setLoading(true);
+          const res = await fetch("http://localhost:5050/api/blueprint", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              role,
+              stack: stack.split(",").map(s=>s.trim()).filter(Boolean),
+              experience,
+              types,
+              duration,
+              notes
+            })
+          });
+          const data = await res.json();
+          setLoading(false);
+          if(data.ok){
+            setBlueprint(data.blueprint);
+            setPhase(2);
+          }else{
+            alert("Failed to create blueprint");
+          }
+        }
+
+        async function generateTest(){
+          setLoading(true);
+          const res = await fetch("http://localhost:5050/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ blueprint })
+          });
+          const data = await res.json();
+          setLoading(false);
+          if(data.ok){
+            setTest(data.test);
+            setPhase(3);
+          }else{
+            alert("Failed to generate test");
+          }
+        }
+
+        async function submitTest(){
+          setLoading(true);
+          const res = await fetch("http://localhost:5050/api/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ testId: test.id, responses })
+          });
+          const data = await res.json();
+          setLoading(false);
+          if(data.ok){
+            window.report = data.report;
+            alert("Report generated. Open console or see JSON below.");
+            setPhase(4);
+            setReport(data.report);
+          }else{
+            alert("Submission failed");
+          }
+        }
+
+        const [report, setReport] = useState(null);
+
+        return (
+          <div className="max-w-5xl mx-auto">
+            <h1 className="text-2xl font-bold mb-4">AI-Powered Assessment — Mini Demo</h1>
+
+            {phase === 1 && (
+              <div className="bg-white p-4 rounded-xl shadow">
+                <h2 className="text-xl font-semibold mb-3">Phase I — Role & Requirements</h2>
+                <Field label="Role">
+                  <input className="border rounded px-2 py-1 w-full" value={role} onChange={e=>setRole(e.target.value)} />
+                </Field>
+                <Field label="Tech Stack / Skills (comma separated)">
+                  <input className="border rounded px-2 py-1 w-full" value={stack} onChange={e=>setStack(e.target.value)} />
+                </Field>
+                <Field label="Experience">
+                  <select className="border rounded px-2 py-1 w-full" value={experience} onChange={e=>setExperience(e.target.value)}>
+                    <option>0-1 years</option>
+                    <option>1-3 years</option>
+                    <option>3-5 years</option>
+                    <option>5+ years</option>
+                  </select>
+                </Field>
+                <Field label="Preferred Question Types">
+                  <div className="flex gap-2 flex-wrap">
+                    {["MCQ","short","coding","scenario"].map(t => (
+                      <label key={t} className="flex items-center gap-2 border rounded px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={types.includes(t)}
+                          onChange={() => {
+                            setTypes(p => p.includes(t) ? p.filter(x=>x!==t) : [...p,t])
+                          }}
+                        />
+                        {t}
+                      </label>
+                    ))}
+                  </div>
+                </Field>
+                <Field label="Duration (minutes)">
+                  <input type="number" className="border rounded px-2 py-1 w-full" value={duration} onChange={e=>setDuration(+e.target.value)} />
+                </Field>
+                <Field label="Natural Language Constraints">
+                  <textarea className="border rounded px-2 py-1 w-full" rows="3" value={notes} onChange={e=>setNotes(e.target.value)} />
+                </Field>
+                <button disabled={loading} onClick={createBlueprint} className="px-4 py-2 rounded-lg bg-black text-white">
+                  {loading ? "Creating..." : "Create Blueprint"}
+                </button>
+              </div>
+            )}
+
+            {phase === 2 && (
+              <div className="bg-white p-4 rounded-xl shadow">
+                <h2 className="text-xl font-semibold mb-3">Blueprint</h2>
+                <pre className="bg-gray-100 p-3 rounded text-sm overflow-auto">{JSON.stringify(blueprint, null, 2)}</pre>
+                <button disabled={loading} onClick={generateTest} className="mt-3 px-4 py-2 rounded-lg bg-black text-white">
+                  {loading ? "Generating..." : "Generate Test"}
+                </button>
+              </div>
+            )}
+
+            {phase === 3 && test && (
+              <div className="bg-white p-4 rounded-xl shadow">
+                <h2 className="text-xl font-semibold mb-3">Phase 3 — Take Test</h2>
+                <div className="text-sm mb-2">Test ID: <b>{test.id}</b></div>
+                {test.questions.map(q => (
+                  <div key={q.id} className="border rounded-lg p-3 mb-3">
+                    <div className="text-sm text-gray-600">{q.skill} • {q.type} • {q.difficulty} • {q.time} min</div>
+                    <div className="font-medium mb-2">{q.id}. {q.prompt}</div>
+                    {q.type === 'MCQ' && (
+                      <div className="space-y-1">
+                        {q.options.map((op, i) => (
+                          <label key={i} className="flex items-start gap-2">
+                            <input type="radio" name={q.id} onChange={()=>setResponses(r=>({...r, [q.id]: { choice: i }}))} />
+                            <div>{op}</div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {q.type === 'short' || q.type === 'scenario' ? (
+                      <textarea className="border rounded px-2 py-1 w-full" rows="3"
+                        onChange={e=>setResponses(r=>({...r, [q.id]: { text: e.target.value }}))}/>
+                    ) : null}
+                    {q.type === 'coding' && (
+                      <textarea className="border rounded px-2 py-1 w-full font-mono" rows="6" defaultValue={q.starterCode}
+                        onChange={e=>setResponses(r=>({...r, [q.id]: { code: e.target.value }}))}/>
+                    )}
+                  </div>
+                ))}
+                <button disabled={loading} onClick={submitTest} className="px-4 py-2 rounded-lg bg-black text-white">
+                  {loading ? "Submitting..." : "Submit & Generate Report"}
+                </button>
+              </div>
+            )}
+
+            {phase === 4 && report && (
+              <div className="bg-white p-4 rounded-xl shadow">
+                <h2 className="text-xl font-semibold mb-3">AI Assessment Report</h2>
+                <div className="text-lg font-bold mb-2">Overall: {report.overallScore}%</div>
+                <div className="mb-2">
+                  <div className="font-medium">Per-skill breakdown</div>
+                  <pre className="bg-gray-100 p-3 rounded text-sm overflow-auto">{JSON.stringify(report.perSkill, null, 2)}</pre>
+                </div>
+                <div className="mb-2">
+                  <div className="font-medium">Strengths</div>
+                  <ul className="list-disc ml-6">{report.strengths.map(s => <li key={s}>{s}</li>)}</ul>
+                </div>
+                <div className="mb-2">
+                  <div className="font-medium">Weaknesses</div>
+                  <ul className="list-disc ml-6">{report.weaknesses.map(s => <li key={s}>{s}</li>)}</ul>
+                </div>
+                <div className="mb-2">
+                  <div className="font-medium">Recommendations</div>
+                  <ul className="list-disc ml-6">{report.recommendations.map((s,i) => <li key={i}>{s}</li>)}</ul>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    </script>
+  </body>
+</html>
